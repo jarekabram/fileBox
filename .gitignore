@@ -1,0 +1,15 @@
+klient/bin
+
+klient/obj
+
+serwer/obj
+
+serwer/bin
+
+.vs
+
+fileBox.sln
+
+Common/obj
+
+Common/bin
