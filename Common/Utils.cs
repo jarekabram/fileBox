@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -33,6 +34,23 @@ namespace Common
                 temp++;
             }
             return temp;
+        }
+
+        public static RegistryKey AddContextMenuButton()
+        {
+            RegistryKey registryKey;
+
+            registryKey = Registry.ClassesRoot.CreateSubKey(@"Directory\shell\fileBox");
+            registryKey = Registry.ClassesRoot.CreateSubKey(@"Directory\shell\fileBox\command");
+            registryKey.SetValue("", @"F:\Studia\II_stopien\II_semestr\mpw\fileBox\klient\bin\Debug\netcoreapp2.2\win10-x64\publish\Klient.exe " + "\"" + "%1" + "\"");
+
+            return registryKey;
+        }
+        public static void RemoveContextMenuButton(RegistryKey registryKey)
+        {
+            registryKey.DeleteValue("");
+            Registry.ClassesRoot.DeleteSubKey(@"Directory\shell\fileBox\command");
+            Registry.ClassesRoot.DeleteSubKey(@"Directory\shell\fileBox");
         }
     }
 }

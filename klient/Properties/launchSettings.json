@@ -1,7 +1,8 @@
 {
   "profiles": {
     "Klient": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "commandLineArgs": "F:\\Studia\\II_stopien\\II_semestr\\mpw\\fileBox\\test"
     }
   }
 }

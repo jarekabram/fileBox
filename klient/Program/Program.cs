@@ -10,28 +10,25 @@ namespace Klient
     {
         static void Main(string[] args)
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                throw new Exception("Platform is not supported right now ...");
-            }
             if (args.Length != 1)
             {
                 System.Threading.Thread.Sleep(1000);
                 LogHandler.GetLogHandler.Log("wrong Number of parameters");
                 Console.ReadKey();
             }
-            string userName = Console.ReadLine();
             Console.WriteLine("Insert user name: ");
+            string userName = Console.ReadLine();
 
             LogHandler.GetLogHandler.Log("Path: " + args[0] + " Username: "+ userName);
             try
             {
-                FileManager fm = new FileManager(args[0], "127.0.0.1", 4444);
-                fm.WatchDirectory(args[1]);
+                ClientConnection clientConnection = new ClientConnection(args[0], "127.0.0.1", 4444);
+                clientConnection.WatchDirectory(args[0]);
             }
             catch (Exception ex)
             {
                 LogHandler.GetLogHandler.Log(ex.Message);
+                Console.ReadKey();
             }
         }
     }

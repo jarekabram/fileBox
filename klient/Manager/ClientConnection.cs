@@ -9,12 +9,12 @@ using Common;
 
 namespace Klient.Manager
 {
-    class FileManager
+    class ClientConnection
     {
         private TcpClient _tcpClient;
         private const int m_BufferSize = 1024;
         private string m_User = null;
-        public FileManager(string p_User, string p_Server, int p_Port)
+        public ClientConnection(string p_User, string p_Server, int p_Port)
         {
             m_User = p_User;
             _tcpClient = new TcpClient(p_Server, p_Port);
@@ -67,6 +67,7 @@ namespace Klient.Manager
                                 _tcpClient.Client.Send(buffer, size, SocketFlags.Partial);
 
                             }
+                            fileStream.Close();
 
                             fileCount++;
                         }
