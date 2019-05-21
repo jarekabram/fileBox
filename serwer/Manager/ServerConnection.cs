@@ -82,6 +82,7 @@ namespace Serwer.Manager
                             string message = Utils.encodeBuffer(buffer, Utils.fixedBufferSize(buffer));
                             LogHandler.GetLogHandler.Log("(" + Thread.CurrentThread.Name + ") - " + "file received - content: {" + message + "}");
                             fileSize -= size;
+                            fileStream.Write(buffer, 0, size);
                         }
                         fileStream.Close();
                     }
