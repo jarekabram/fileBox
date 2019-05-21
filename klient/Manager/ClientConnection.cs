@@ -24,14 +24,17 @@ namespace Klient.Manager
 
         public void WatchDirectory(string p_Path)
         {
-            if (Directory.Exists(p_Path))
+            p_Path = Path.Combine(p_Path, m_User);
+
+            A: if (Directory.Exists(p_Path))
             {
                 int fileCount = Directory.GetFiles(p_Path).Length;
-                byte[] buffer = null;
-                byte[] header = null;
 
                 while (true)
                 {
+                    byte[] buffer = null;
+                    byte[] header = null;
+
                     if (fileCount < Directory.GetFiles(p_Path).Length)
                     {
                         try
@@ -86,7 +89,8 @@ namespace Klient.Manager
             }
             else
             {
-                throw new Exception("Wrong path, please insert correct path to destination directory...");
+                Directory.CreateDirectory(p_Path);
+                goto A;
             }
         }
     }

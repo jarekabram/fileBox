@@ -13,13 +13,13 @@ namespace Serwer.Manager
     {
         private const int m_BufferSize = 1024;
         private static TcpListener m_Server = null;
-        private static Mutex m_Mutex = new Mutex();
+        //private static Mutex m_Mutex = new Mutex();
 
         public ServerConnection(string p_Address, int p_Port)
         {
-            // Set the TcpListener on port 4444.
             IPAddress localAddr = IPAddress.Parse(p_Address);
 
+            // Set the TcpListener on port 4444.
             m_Server = new TcpListener(localAddr, p_Port);
         }
 
@@ -29,31 +29,30 @@ namespace Serwer.Manager
 
             // Start listening for client requests.
             m_Server.Start();
-            if (m_Server.Pending())
+            while (true)
             {
-                Socket socket = m_Server.AcceptSocket();
-                ProcessFile(socket);
+                TcpClient client = m_Server.AcceptTcpClient();
+                Thread thread = new Thread(ProcessFile);
+
+                Guid guid = Guid.NewGuid();
+                thread.Name = guid.ToString();
+                thread.Start(client);
             }
-            else
-            {
-                Thread.Sleep(100);
-            }
-            
+
         }
 
-        private void ProcessFile(Socket socket)
+        private void ProcessFile(object input)
         {
-            var thread = new Thread(() =>
+            while (true)
             {
-                m_Mutex.WaitOne();
-                byte[] header = null;
-                header = new byte[m_BufferSize];
+                var client = input as TcpClient;
+                byte[] header = new byte[m_BufferSize];
                 try
                 {
-                    socket.Receive(header);
+                    client.Client.Receive(header);
                     if (header != null)
                     {
-                        LogHandler.GetLogHandler.Log("received message");
+                        LogHandler.GetLogHandler.Log("(" + Thread.CurrentThread.Name + ") - " + "received message");
 
                         string headerStr = Encoding.ASCII.GetString(header);
                         int terminate = headerStr.IndexOf("\0");
@@ -73,33 +72,30 @@ namespace Serwer.Manager
                         string user = headers["username"];
 
                         byte[] buffer = null;
-                        LogHandler.GetLogHandler.Log("received header: { file: " + filename + " size: " + fileSize + " user: " + user);
+                        LogHandler.GetLogHandler.Log("(" + Thread.CurrentThread.Name + ") - " + "received header: { file: " + filename + " size: " + fileSize + " user: " + user);
 
-                        FileStream fs = new FileStream(filename, FileMode.OpenOrCreate);
+                        FileStream fileStream = new FileStream(filename, FileMode.OpenOrCreate);
                         while (fileSize > 0)
                         {
                             buffer = new byte[m_BufferSize];
-                            int size = socket.Receive(buffer, SocketFlags.Partial);
+                            int size = client.Client.Receive(buffer, SocketFlags.Partial);
                             string message = Utils.encodeBuffer(buffer, Utils.fixedBufferSize(buffer));
-                            LogHandler.GetLogHandler.Log("file received - content: {" + message + "}");
+                            LogHandler.GetLogHandler.Log("(" + Thread.CurrentThread.Name + ") - " + "file received - content: {" + message + "}");
                             fileSize -= size;
                         }
+                        fileStream.Close();
                     }
                     else
                     {
-                        m_Mutex.ReleaseMutex();
-                        throw new Exception("Buffer is empty");
+                        throw new Exception("(" + Thread.CurrentThread.Name + ") - " + "Buffer is empty");
                     }
                 }
                 catch (Exception ex)
                 {
-                    LogHandler.GetLogHandler.Log(ex.Message);
-                    m_Mutex.ReleaseMutex();
+                    LogHandler.GetLogHandler.Log("(" + Thread.CurrentThread.Name + ") - " + ex.Message);
                     throw;
                 }
-
-            });
-            thread.Start();
+            }
         }
     }
 }

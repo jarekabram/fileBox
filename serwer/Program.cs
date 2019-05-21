@@ -31,14 +31,10 @@ namespace serwer
             // Add event of cleaning item in windows context menu due to it would be no longer needed
             AppDomain.CurrentDomain.ProcessExit += AppDomain_ProcessExit;
 
-
             try
             {
                 ServerConnection serverConnection = new ServerConnection("127.0.0.1", 4444);
-                while (true)
-                {
-                    serverConnection.ListenToClient();
-                }
+                serverConnection.ListenToClient();
             }
             catch (Exception ex)
             {

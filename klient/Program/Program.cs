@@ -22,7 +22,7 @@ namespace Klient
             LogHandler.GetLogHandler.Log("Path: " + args[0] + " Username: "+ userName);
             try
             {
-                ClientConnection clientConnection = new ClientConnection(args[0], "127.0.0.1", 4444);
+                ClientConnection clientConnection = new ClientConnection(userName, "127.0.0.1", 4444);
                 clientConnection.WatchDirectory(args[0]);
             }
             catch (Exception ex)
