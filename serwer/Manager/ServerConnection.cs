@@ -13,14 +13,19 @@ namespace Serwer.Manager
     {
         private const int m_BufferSize = 1024;
         private static TcpListener m_Server = null;
+        private Dictionary<string, string> m_UserThread;
+        private List<UserData> m_UserDataList;
         //private static Mutex m_Mutex = new Mutex();
 
         public ServerConnection(string p_Address, int p_Port)
         {
             IPAddress localAddr = IPAddress.Parse(p_Address);
-
-            // Set the TcpListener on port 4444.
+            // Set the TcpListener
             m_Server = new TcpListener(localAddr, p_Port);
+
+            // Initialize members
+            m_UserThread = new Dictionary<string, string>();
+            m_UserDataList = new List<UserData>();
         }
 
         public void ListenToClient()
@@ -43,6 +48,7 @@ namespace Serwer.Manager
 
         private void ProcessFile(object input)
         {
+            
             while (true)
             {
                 var client = input as TcpClient;
@@ -56,7 +62,7 @@ namespace Serwer.Manager
 
                         string headerStr = Encoding.ASCII.GetString(header);
                         int terminate = headerStr.IndexOf("\0");
-                        headerStr = headerStr.Substring(0, terminate + 1);
+                        headerStr = headerStr.Substring(0, terminate);
 
                         string[] splitted = headerStr.Split("|", StringSplitOptions.None);
                         Dictionary<string, string> headers = new Dictionary<string, string>();
@@ -67,9 +73,27 @@ namespace Serwer.Manager
                                 headers.Add(s.Substring(0, s.IndexOf(":")), s.Substring(s.IndexOf(":") + 1));
                             }
                         }
+
                         string filename = headers["filename"];
                         int fileSize = Convert.ToInt32(headers["filesize"]);
                         string user = headers["username"];
+
+                        // finish thread work if user exists with other thread id
+                        if (m_UserThread.ContainsKey(user))
+                        {
+                            if (m_UserThread[user] != Thread.CurrentThread.Name)
+                            {
+                                client.Close();
+                                LogHandler.GetLogHandler.Log("Actually such user " + user + " exists!");
+                                return;
+                            }
+                        }
+                        else
+                        {
+                            // in other case add user with corresponding thread
+                            m_UserThread.Add(user, Thread.CurrentThread.Name);
+                        }
+
 
                         byte[] buffer = null;
                         LogHandler.GetLogHandler.Log("(" + Thread.CurrentThread.Name + ") - " + "received header: { file: " + filename + " size: " + fileSize + " user: " + user);

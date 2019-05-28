@@ -1,13 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
 using Microsoft.Win32;
 using Common;
 using Serwer.Manager;
-using System.Threading;
 
 namespace serwer
 {
@@ -19,7 +14,7 @@ namespace serwer
         {
 
             // hardcode definition of client application path
-            if (!File.Exists(@"F:\Studia\II_stopien\II_semestr\mpw\fileBox\klient\bin\Debug\netcoreapp2.2\win10-x64\publish\Klient.exe"))
+            if (!File.Exists(Config.ClientPath))
             {
                 throw new FileNotFoundException("please install client application first");
             }
@@ -33,7 +28,7 @@ namespace serwer
 
             try
             {
-                ServerConnection serverConnection = new ServerConnection("127.0.0.1", 4444);
+                ServerConnection serverConnection = new ServerConnection(Config.ServerAddress, Config.ServerPort);
                 serverConnection.ListenToClient();
             }
             catch (Exception ex)

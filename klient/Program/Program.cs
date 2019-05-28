@@ -2,6 +2,7 @@
 using System.Runtime.InteropServices;
 using Common;
 using Klient.Manager;
+using System.Threading;
 
 
 namespace Klient
@@ -12,18 +13,20 @@ namespace Klient
         {
             if (args.Length != 1)
             {
-                System.Threading.Thread.Sleep(1000);
                 LogHandler.GetLogHandler.Log("wrong Number of parameters");
                 Console.ReadKey();
             }
+            string selectedDirectoryPath = args[0];
             Console.WriteLine("Insert user name: ");
             string userName = Console.ReadLine();
 
-            LogHandler.GetLogHandler.Log("Path: " + args[0] + " Username: "+ userName);
+            LogHandler.GetLogHandler.Log("Path: " + selectedDirectoryPath + " Username: "+ userName);
             try
             {
-                ClientConnection clientConnection = new ClientConnection(userName, "127.0.0.1", 4444);
-                clientConnection.WatchDirectory(args[0]);
+                ClientConnection clientConnection = new ClientConnection(userName, Config.ServerAddress, Config.ServerPort);
+
+                Thread watchDirectoryThread = new Thread(clientConnection.WatchDirectory);
+                watchDirectoryThread.Start(selectedDirectoryPath);
             }
             catch (Exception ex)
             {

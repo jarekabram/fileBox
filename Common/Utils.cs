@@ -2,9 +2,36 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Configuration;
 
 namespace Common
 {
+    public class Config
+    {
+        public static string ClientPath
+        {
+            get
+            {
+                return ConfigurationManager.AppSettings.Get("ClientPath");
+            }
+        }
+
+        public static string ServerAddress
+        {
+            get
+            {
+                return ConfigurationManager.AppSettings.Get("ServerAddress"); ;
+            }
+        }
+
+        public static int ServerPort
+        {
+            get
+            {
+                return Convert.ToInt32(ConfigurationManager.AppSettings.Get("ServerPort"));
+            }
+        }
+    }
     public class Utils
     {
         public static string encodeBuffer(byte[] buffer, int fixedSize)
@@ -42,8 +69,7 @@ namespace Common
 
             registryKey = Registry.ClassesRoot.CreateSubKey(@"Directory\shell\fileBox");
             registryKey = Registry.ClassesRoot.CreateSubKey(@"Directory\shell\fileBox\command");
-            registryKey.SetValue("", @"F:\Studia\II_stopien\II_semestr\mpw\fileBox\klient\bin\Debug\netcoreapp2.2\win10-x64\publish\Klient.exe " + "\"" + "%1" + "\"");
-
+            registryKey.SetValue("", Config.ClientPath + " \"" + "%1" + "\"");
             return registryKey;
         }
         public static void RemoveContextMenuButton(RegistryKey registryKey)
