@@ -11,23 +11,19 @@ namespace Klient.Manager
 {
     class ClientConnection
     {
-        private TcpClient _tcpClient;
+        private TcpClient m_tcpClient;
         
-        private bool m_serverAvailable = false;
-        private const int m_BufferSize = 1024;
         private const int m_Timeout = 2500;
         private int m_retryCount;
         private int m_Port;
-        private string m_Server;
+        private string m_Address;
         private string m_User = null;
         
-        public ClientConnection(string p_User, string p_Server, int p_Port)
+        public ClientConnection(string p_User, string p_Address, int p_Port)
         {
             m_User = p_User;
-            m_Server = p_Server;
+            m_Address = p_Address;
             m_Port = p_Port;
-
-            Connect();
         }
 
         internal void WatchDirectory(object input)
@@ -43,20 +39,17 @@ namespace Klient.Manager
             int fileCount = Directory.GetFiles(p_Path).Length;
             while (true)
             {
-                if (_tcpClient == null)
+                if (m_tcpClient == null)
                 {
                     LogHandler.GetLogHandler.Log("Waiting for server to connect with.");
                     Thread.Sleep(m_Timeout);
+
                     Connect();
                 }
                 else
                 {
-                    //if (m_serverAvailable)
-                    if (_tcpClient.Client.Connected)
+                    if (m_tcpClient.Client.Connected)
                     {
-                        byte[] buffer = null;
-                        byte[] header = null;
-
                         if (fileCount < Directory.GetFiles(p_Path).Length)
                         {
                             try
@@ -70,35 +63,21 @@ namespace Klient.Manager
                                                     .First();
 
                                 // prepare file
-                                FileStream fileStream = new FileStream(Path.Combine(p_Path, myFile.Name), FileMode.Open);
-                                int bufferCount = Convert.ToInt32(Math.Ceiling((double)fileStream.Length / (double)m_BufferSize));
-
+                                byte[] fileContent = File.ReadAllBytes(Path.Combine(p_Path, myFile.Name));
+                                
                                 // prepare header
-                                string headerStr = "filename:" + myFile.Name + "|" + "filesize:" + fileStream.Length + "|" + "username:" + m_User;
+                                string headerStr = "filename:" + myFile.Name + "|" + "filesize:" + fileContent.Length + "|" + "username:" + m_User;
                                 LogHandler.GetLogHandler.Log("Prepared header to send: {" + headerStr + "}");
-                                header = new byte[m_BufferSize];
 
-                                // copy characters to header
-                                Array.Copy(Encoding.ASCII.GetBytes(headerStr), header, Encoding.ASCII.GetBytes(headerStr).Length);
-                                // send header to server
-                                _tcpClient.Client.Send(header);
-
-                                // send file to server
-                                for (int i = 0; i < bufferCount; i++)
-                                {
-                                    buffer = new byte[m_BufferSize];
-                                    int size = fileStream.Read(buffer, 0, m_BufferSize);
-
-                                    _tcpClient.Client.Send(buffer, size, SocketFlags.Partial);
-
-                                }
-                                fileStream.Close();
+                                Data dataToSend = new Data(Thread.CurrentThread.ManagedThreadId, headerStr, fileContent);
+                                byte[] requestBuffer = Utils.ObjectToByteArray(dataToSend);
+                                m_tcpClient.Client.Send(requestBuffer, requestBuffer.Length, SocketFlags.Partial);
 
                                 fileCount++;
                             }
-                            catch (Exception)
+                            catch (Exception p_exc)
                             {
-                                throw;
+                                LogHandler.GetLogHandler.Log(p_exc.Message);
                             }
                         }
                         else if (fileCount > Directory.GetFiles(p_Path).Length)
@@ -107,12 +86,16 @@ namespace Klient.Manager
                             fileCount = Directory.GetFiles(p_Path).Length;
                         }
 
-                        PingServer();
+                        // ping server to check connection availability
+                        Utils.Ping(m_tcpClient);
                     }
                     else
                     {
+                        // wait until next connection check
                         Thread.Sleep(m_Timeout);
                         LogHandler.GetLogHandler.Log("Lost connection with server, trying again ( " + m_retryCount + " retries left... )");
+
+                        // if retries are exhausted, finish job
                         if (m_retryCount == 0)
                         {
                             return;
@@ -127,31 +110,13 @@ namespace Klient.Manager
             }
         }
 
-        private void PingServer()
-        {
-            // Detect if client disconnected
-            if (_tcpClient.Client.Poll(0, SelectMode.SelectRead))
-            {
-                byte[] buff = new byte[1];
-                try
-                {
-                    _tcpClient.Client.Receive(buff, SocketFlags.Peek);
-                }
-                catch (Exception)
-                {
-                    // Client disconnected
-                    LogHandler.GetLogHandler.Log("Client is disconnected...");
-                }
-            }
-        }
-
         private bool Connect()
         {
             try
             {
-                _tcpClient = new TcpClient(m_Server, m_Port);
+                m_tcpClient = new TcpClient(m_Address, m_Port);
                 m_retryCount = 5;
-                if (_tcpClient.Connected)
+                if (m_tcpClient.Connected)
                 {
                     LogHandler.GetLogHandler.Log("Connected with server");
                 }

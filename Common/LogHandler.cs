@@ -13,8 +13,8 @@ namespace Common
         private string _logFile = null;
         private LogHandler()
         {
-            SetPathToLogFile();
-            CreateLogFile();
+            //SetPathToLogFile();
+            //CreateLogFile();
             Console.WriteLine("Writing logs to log file: " + _logFile);
         }
 

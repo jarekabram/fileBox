@@ -23,7 +23,7 @@ namespace Klient
             LogHandler.GetLogHandler.Log("Path: " + selectedDirectoryPath + " Username: "+ userName);
             try
             {
-                ClientConnection clientConnection = new ClientConnection(userName, Config.ServerAddress, Config.ServerPort);
+                ClientConnection clientConnection = new ClientConnection(userName, Config.ClientAddress, Config.ClientPort);
 
                 Thread watchDirectoryThread = new Thread(clientConnection.WatchDirectory);
                 watchDirectoryThread.Start(selectedDirectoryPath);

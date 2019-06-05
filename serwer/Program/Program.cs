@@ -3,6 +3,7 @@ using System.IO;
 using Microsoft.Win32;
 using Common;
 using Serwer.Manager;
+using System.Threading;
 
 namespace serwer
 {
@@ -26,14 +27,18 @@ namespace serwer
             // Add event of cleaning item in windows context menu due to it would be no longer needed
             AppDomain.CurrentDomain.ProcessExit += AppDomain_ProcessExit;
 
-            try
+            while (true)
             {
-                ServerConnection serverConnection = new ServerConnection(Config.ServerAddress, Config.ServerPort);
-                serverConnection.ListenToClient();
-            }
-            catch (Exception ex)
-            {
-                LogHandler.GetLogHandler.Log(ex.Message);
+                try
+                {
+                    ServerConnection serverConnection = new ServerConnection(Config.ServerAddress, Config.ServerPort);
+                    serverConnection.ProcessFile();
+                }
+                catch (Exception ex)
+                {
+                    LogHandler.GetLogHandler.Log(ex.Message);
+                    Thread.Sleep(3500);
+                }
             }
         }
 
