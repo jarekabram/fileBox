@@ -124,7 +124,7 @@ namespace Common
         /// <returns></returns>
         public static int GetIntFromBytes(byte[] p_bytes)
         {
-            if (p_bytes.Length == 4)
+            if (p_bytes.Length == 1024)
             {
                 return BitConverter.ToInt32(p_bytes);
             }

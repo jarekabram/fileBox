@@ -18,7 +18,8 @@ namespace Klient.Manager
         private int m_Port;
         private string m_Address;
         private string m_User = null;
-        
+        private int m_bufferSize = 1024;
+
         public ClientConnection(string p_User, string p_Address, int p_Port)
         {
             m_User = p_User;
@@ -69,8 +70,10 @@ namespace Klient.Manager
                                 string headerStr = "filename:" + myFile.Name + "|" + "filesize:" + fileContent.Length + "|" + "username:" + m_User;
                                 LogHandler.GetLogHandler.Log("Prepared header to send: {" + headerStr + "}");
 
-                                Data dataToSend = new Data(Thread.CurrentThread.ManagedThreadId, headerStr, fileContent);
-                                byte[] requestBuffer = Utils.ObjectToByteArray(dataToSend);
+                                Data dataToSend = new Data(headerStr, fileContent);
+                                byte[] data = Utils.ObjectToByteArray(dataToSend);
+                                byte[] requestBuffer = new byte[m_bufferSize];
+                                Array.Copy(data, requestBuffer, data.Length);
                                 m_tcpClient.Client.Send(requestBuffer, requestBuffer.Length, SocketFlags.Partial);
 
                                 fileCount++;
@@ -103,7 +106,7 @@ namespace Klient.Manager
                         // retry connection
                         if (!Connect())
                         {
-                            m_retryCount--;
+                            //m_retryCount--;
                         }
                     }
                 }

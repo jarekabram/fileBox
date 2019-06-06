@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Text;
 using System.Threading;
 using Common;
 
@@ -79,7 +80,6 @@ namespace test_queue
 
                                 LogHandler.GetLogHandler.Log("Clients: " + m_listConnectedClients.Count +
                                                              ", Queue count: " + m_queue.Count +
-                                                             ", Received Data: { Id: " + receivedData.ManagedThreadId +
                                                              ", Header: " + receivedData.Header +
                                                              ", Message: " + Utils.ReadBytes(receivedData.Message) + "}");
                                 m_queue.Enqueue(receivedData);
@@ -117,18 +117,23 @@ namespace test_queue
 
                     while (true)
                     {
-                        byte[] requestBuffer = new byte[4];
+                        byte[] requestBuffer = new byte[m_BufferSize];
                         // if the received buffer contains FILE_AVAILABLE_REQUEST value then try to send data or 
                         // inform back that file is not available
+
+                        LogHandler.GetLogHandler.Log("Receive 1");
                         client.Client.Receive(requestBuffer, SocketFlags.Partial);
-                        int result = Utils.GetIntFromBytes(requestBuffer);
-                        LogHandler.GetLogHandler.Log("received message from server: " + result);
+                        LogHandler.GetLogHandler.Log("Receive 2");
+                        int receivedValue = Utils.GetIntFromBytes(requestBuffer);
+                        LogHandler.GetLogHandler.Log("received message from server: " + receivedValue);
 
-                        requestBuffer = null;
-                        requestBuffer = BitConverter.GetBytes(m_queue.Count);
-                        client.Client.Send(requestBuffer);
-
-                        if (result == 0x01)
+                        requestBuffer = new byte[m_BufferSize];
+                        Array.Copy(BitConverter.GetBytes(m_queue.Count), requestBuffer, BitConverter.GetBytes(m_queue.Count).Length);
+                        lock (locker)
+                        {
+                            client.Client.Send(requestBuffer);
+                        }
+                        if (receivedValue == 0x01)
                         {
                             for (int i = 0; i < m_queue.Count; i++)
                             {
@@ -139,23 +144,46 @@ namespace test_queue
                                     {
                                         lock (locker)
                                         {
-                                            Data data = m_queue.Dequeue();
-                                            byte[] response = Utils.ObjectToByteArray(data);
-                                            client.Client.Send(response);
-                                            Thread.Sleep(m_Timeout);
+                                            Data data = null;
+                                            bool result = m_queue.TryDequeue(out data);
+                                            if (result == true)
+                                            {
+                                                int bufferCount = Convert.ToInt32(Math.Ceiling((double)data.Message.Length / (double)m_BufferSize));
+                                                //client.Client.Send(response);
+
+                                                LogHandler.GetLogHandler.Log("Prepared header to send: {" + data.Header + "}");
+                                                byte[] header = new byte[m_BufferSize];
+
+                                                // copy characters to header
+                                                Array.Copy(Encoding.ASCII.GetBytes(data.Header), header, Encoding.ASCII.GetBytes(data.Header).Length);
+                                                // send header to server
+                                                client.Client.Send(header);
+
+                                                //requestBuffer = new byte[m_BufferSize];
+                                                //client.Client.Receive(requestBuffer);
+
+                                                // send file to server
+                                                for (int j = 0; j < bufferCount; j++)
+                                                {
+                                                    requestBuffer = null;
+                                                    requestBuffer = new byte[m_BufferSize];
+                                                    Array.Copy(data.Message, requestBuffer, data.Message.Length);
+                                                    client.Client.Send(requestBuffer, requestBuffer.Length, SocketFlags.Partial);
+                                                }
+                                                LogHandler.GetLogHandler.Log("Here");
+                                            }
+                                            else
+                                            {
+                                                LogHandler.GetLogHandler.Log("Queue is empty");
+                                            }
+                                            
                                         }
-                                    }
-                                    else
-                                    {
-                                        // nothing to send, just set timeout in client 
-                                        byte[] buffer = new byte[1];
-                                        client.Client.Send(buffer, 1, SocketFlags.Partial);
                                     }
                                 });
                                 thread.Start();
                             }
                         }
-                        else if (result == -1)
+                        else if (receivedValue == -1)
                         {
                             // invalid data
                             LogHandler.GetLogHandler.Log("invalid data");
