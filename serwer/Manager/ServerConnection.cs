@@ -17,10 +17,11 @@ namespace Serwer.Manager
         private const int m_BufferSize = 1024;
         private const int m_Timeout = 5000;
         private static TcpClient m_tcpClient = null;
-        
+        private static TcpClient m_tcpThreadClient = null;
+
         private string m_Address;
         private int m_Port;
-        private readonly object locker = new object();
+        private readonly object threadLock = new object();
 
         public ServerConnection(string p_Address, int p_Port)
         {
@@ -39,21 +40,20 @@ namespace Serwer.Manager
                 {
                     if (m_tcpClient.Client.Connected)
                     {
+                        LogHandler.GetLogHandler.Log("");
                         // Send request to check file availability
                         byte[] requestBuffer = new byte[m_BufferSize];
                         Array.Copy(BitConverter.GetBytes(FILE_AVAILABLE_REQUEST), requestBuffer, BitConverter.GetBytes(FILE_AVAILABLE_REQUEST).Length);
                         m_tcpClient.Client.Send(requestBuffer);
+                        LogHandler.GetLogHandler.Log("");
 
                         // if response is ok, have to wait for number of files as response
                         requestBuffer = new byte[m_BufferSize];
-                        lock (locker)
+                        if (stop)
                         {
-                            if (stop)
-                            {
-                                LogHandler.GetLogHandler.Log("Receive 1");
-                                m_tcpClient.Client.Receive(requestBuffer, SocketFlags.Partial);
-                                LogHandler.GetLogHandler.Log("after Receive 1");
-                            }
+                            LogHandler.GetLogHandler.Log("");
+                            m_tcpClient.Client.Receive(requestBuffer, SocketFlags.Partial);
+                            LogHandler.GetLogHandler.Log("");
                         }
                         int fileCount = Utils.GetIntFromBytes(requestBuffer);
                         LogHandler.GetLogHandler.Log("Number of files to be processed: " + fileCount);
@@ -63,62 +63,34 @@ namespace Serwer.Manager
                             stop = false;
                             var thread = new Thread(() =>
                             {
-                                lock (locker)
+                                while (m_tcpThreadClient.Client.Available > 0)
                                 {
-                                    byte[] header = null;
-                                    header = new byte[m_BufferSize];
+                                    byte[] buffer = new byte[m_BufferSize];
+                                    int size = m_tcpThreadClient.Client.Receive(buffer, SocketFlags.Partial);
+                                    IFormatter formatter = new BinaryFormatter();
+                                    Stream stream = new MemoryStream(buffer);
+                                    Data receivedData = (Data)formatter.Deserialize(stream);
 
-                                    LogHandler.GetLogHandler.Log("Receive 2");
-                                    m_tcpClient.Client.Receive(header);
-                                    LogHandler.GetLogHandler.Log("after Receive 2");
-                                    Dictionary<string, string> headers = ProcessHeader(header);
-
-                                    string filename = String.Empty;
-                                    string tempFileSize = String.Empty;
-                                    string user = String.Empty;
-                                    int fileSize = 0;
+                                    Dictionary<string, string> headers = ProcessHeader(receivedData.Header);
 
                                     try
                                     {
-                                        bool ok = headers.TryGetValue("filename", out filename);
+                                        string originFilename = headers["filename"];
+                                        string tempFileSize = headers["filesize"];
+                                        string user = headers["username"];
+                                        int fileSize = Convert.ToInt32(tempFileSize);
 
-                                        // Force retry due to some missing packets when sending from queue
-                                        while (!ok)
-                                        {
-                                            header = new byte[m_BufferSize];
+                                        LogHandler.GetLogHandler.Log("Message from Thread: " + Thread.CurrentThread.ManagedThreadId + " - received header: { file: " + originFilename + " size: " + fileSize + " user: " + user);
 
-                                            LogHandler.GetLogHandler.Log("Receive 3");
-                                            m_tcpClient.Client.Receive(header);
-                                            LogHandler.GetLogHandler.Log("after Receive 3");
-                                            headers = ProcessHeader(header);
-                                            ok = headers.TryGetValue("filename", out filename);
-                                        }
-                                        headers.TryGetValue("filesize", out tempFileSize);
-                                        headers.TryGetValue("username", out user);
-                                        fileSize = Convert.ToInt32(tempFileSize);
-
-                                        byte[] buffer = null;
-                                        LogHandler.GetLogHandler.Log("received header: { file: " + filename + " size: " + fileSize + " user: " + user);
-
-                                        //requestBuffer = new byte[m_BufferSize];
-                                        //Array.Copy(Encoding.ASCII.GetBytes("ok"), requestBuffer, Encoding.ASCII.GetBytes("ok").Length);
-                                        //m_tcpClient.Client.Send(requestBuffer);
                                         string name = GenerateFileName();
 
                                         FileStream fs = new FileStream(name, FileMode.OpenOrCreate);
-                                        while (fileSize > 0)
-                                        {
-                                            buffer = new byte[m_BufferSize];
-                                            LogHandler.GetLogHandler.Log("Receive 4");
-                                            int size = m_tcpClient.Client.Receive(buffer, SocketFlags.Partial);
-                                            LogHandler.GetLogHandler.Log("after Receive 4");
-                                            string message = Utils.DecodeBuffer(buffer, Utils.FixedBufferSize(buffer));
-                                            fs.Write(buffer, 0, fileSize);
-                                            LogHandler.GetLogHandler.Log("file received - content: {" + message + "}");
-                                            fileSize -= size;
-                                        }
-                                        fs.Close();
 
+                                        LogHandler.GetLogHandler.Log("Message from Thread: " + Thread.CurrentThread.ManagedThreadId + " WAitnig for message");
+                                        fs.Write(receivedData.Message, 0, fileSize);
+                                        LogHandler.GetLogHandler.Log("Message from Thread: " + Thread.CurrentThread.ManagedThreadId + " - file received - content: {" + Utils.ReadBytes(receivedData.Message) + "}");
+
+                                        fs.Close();
 
                                         ReaderWriterLock locker = new ReaderWriterLock();
                                         try
@@ -126,7 +98,7 @@ namespace Serwer.Manager
                                             locker.AcquireWriterLock(int.MaxValue);
                                             File.AppendAllLines(Config.FileList, new string[]
                                             {
-                                                user + "," + filename + "," + Convert.ToString(fileSize)
+                                            user + "," + originFilename + "," + fileSize + "," + name
                                             });
                                         }
                                         finally
@@ -136,16 +108,18 @@ namespace Serwer.Manager
                                     }
                                     catch (Exception ex)
                                     {
-                                        LogHandler.GetLogHandler.Log("Failed to save file: " + ex.Message);
+                                        LogHandler.GetLogHandler.Log("Thread " + Thread.CurrentThread.ManagedThreadId + " Failed to save file: " + ex.Message);
                                     }
+                                }
 
-                                    counter++;
-                                    LogHandler.GetLogHandler.Log("Thread " + Thread.CurrentThread.ManagedThreadId + " finished work");
-                                    if (counter == fileCount)
-                                    {
-                                        stop = true;
-                                        counter = 0;
-                                    }
+                                
+
+                                counter++;
+                                LogHandler.GetLogHandler.Log("Thread " + Thread.CurrentThread.ManagedThreadId + " finished work");
+                                if (counter == fileCount)
+                                {
+                                    stop = true;
+                                    counter = 0;
                                 }
                                 // thread finished
                             });
@@ -167,10 +141,13 @@ namespace Serwer.Manager
                     LogHandler.GetLogHandler.Log("Received wrong data");
                     Thread.Sleep(m_Timeout);
                 }
+                LogHandler.GetLogHandler.Log("");
 
                 Thread.Sleep(m_Timeout);
             }
         }
+
+       
 
         private string GenerateFileName()
         {
@@ -185,9 +162,9 @@ namespace Serwer.Manager
             return name + ".txt";
         }
 
-        private static Dictionary<string, string> ProcessHeader(byte[] header)
+        private static Dictionary<string, string> ProcessHeader(byte[] p_header)
         {
-            string headerStr = Encoding.ASCII.GetString(header);
+            string headerStr = Encoding.ASCII.GetString(p_header);
             //LogHandler.GetLogHandler.Log("received message " + headerStr);
 
             int terminate = headerStr.IndexOf("\0");
@@ -205,12 +182,33 @@ namespace Serwer.Manager
 
             return headers;
         }
+        private static Dictionary<string, string> ProcessHeader(string p_header)
+        {
+            int terminate = p_header.IndexOf("\0");
+            if (terminate != -1)
+            {
+                p_header = p_header.Substring(0, terminate);
+            }
+
+            string[] splitted = p_header.Split("|", StringSplitOptions.None);
+            Dictionary<string, string> headers = new Dictionary<string, string>();
+            foreach (string s in splitted)
+            {
+                if (s.Contains(":"))
+                {
+                    headers.Add(s.Substring(0, s.IndexOf(":")), s.Substring(s.IndexOf(":") + 1));
+                }
+            }
+
+            return headers;
+        }
 
         private bool Connect()
         {
             try
             {
                 m_tcpClient = new TcpClient(m_Address, m_Port);
+                m_tcpThreadClient = new TcpClient(m_Address, 4446);
             }
             catch (Exception)
             {

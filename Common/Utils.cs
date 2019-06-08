@@ -60,13 +60,12 @@ namespace Common
     public class Utils
     {
         /// <summary>
-        /// Decodes the byte buffer, and then returns it as string 
-        /// taking into account the fixed size of buffer
+        /// Truncates the buffer array to the first met null termination character and converts bytes to chars
         /// </summary>
         /// <param name="p_buffer"></param>
         /// <param name="p_fixedSize"></param>
         /// <returns>Decoded value</returns>
-        public static string DecodeBuffer(byte[] p_buffer, int p_fixedSize)
+        public static string FixedSizeStringFromBufferArray(byte[] p_buffer, int p_fixedSize)
         {
             int temp = 0;
             char[] arr = new char[p_fixedSize + 1];
