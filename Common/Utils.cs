@@ -56,6 +56,13 @@ namespace Common
                 return Convert.ToInt32(ConfigurationManager.AppSettings.Get("ClientPort"));
             }
         }
+        public static int ThreadPort
+        {
+            get
+            {
+                return Convert.ToInt32(ConfigurationManager.AppSettings.Get("ThreadPort"));
+            }
+        }
     }
     public class Utils
     {

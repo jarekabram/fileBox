@@ -1,8 +1,6 @@
 ﻿using System;
 using System.IO;
-using System.Collections.Generic;
-using System.Text;
-using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace Common
 {
@@ -11,10 +9,11 @@ namespace Common
         #region private members and constructors
         private string _path = null;
         private string _logFile = null;
+        private object _logFileLock = new object();
         private LogHandler()
         {
-            //SetPathToLogFile();
-            //CreateLogFile();
+            SetPathToLogFile();
+            CreateLogFile();
             Console.WriteLine("Writing logs to log file: " + _logFile);
         }
 
@@ -45,11 +44,18 @@ namespace Common
             string className = CutClassName(filePath);
             string fullMessage = GetTimestamp(DateTime.Now) + ": " + className + ":" + sourceLineNumber + " (" + memberName + ") - " + message;
             Console.WriteLine(fullMessage);
-            //using (StreamWriter streamWriter = new StreamWriter(_logFile, append: true))
-            //{
-            //    streamWriter.WriteLine(fullMessage);
-            //    streamWriter.Close();
-            //}
+            Thread thread = new Thread(() =>
+            {
+                lock (_logFileLock)
+                {
+                    using (StreamWriter streamWriter = new StreamWriter(_logFile, append: true))
+                    {
+                        streamWriter.WriteLine(fullMessage);
+                        streamWriter.Close();
+                    }
+                }
+            });
+            thread.Start();
 
         }
         #endregion

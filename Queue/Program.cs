@@ -17,17 +17,22 @@ namespace test_queue
         private const int m_BufferSize = 1024;
         private const int m_Timeout = 2500;
 
+        private const int m_threadCount = 5;
+
         // for polling from client side
         static TcpListener m_clientListener = null;
         // for polling from server side
         static TcpListener m_serverListener = null;
         static TcpListener m_serverThreadListener = null;
 
+        static TcpClient m_serverClient = null;
+        static TcpClient m_threadClient = null;
+
         // message queue - data sent from client is placed
         static Queue<Data> m_queue = new Queue<Data>();
         static HashSet<TcpClient> m_listConnectedClients = new HashSet<TcpClient>();
-        static readonly object locker = new object();
-
+        static readonly object m_threadLock = new object();
+        
         static void Main(string[] args)
         {
 
@@ -111,84 +116,45 @@ namespace test_queue
         /// </summary>
         private static void ProcessServer()
         {
-            bool stop = true;
             // that would be connection for requesting a data for a specified amout of time
             while (true)
             {
                 try
                 {
-                    TcpClient client = m_serverListener.AcceptTcpClient();
-                    TcpClient threadClient = m_serverThreadListener.AcceptTcpClient();
+                    m_serverClient = m_serverListener.AcceptTcpClient();
+                    m_threadClient = m_serverThreadListener.AcceptTcpClient();
 
                     while (true)
                     {
                         byte[] requestBuffer = new byte[m_BufferSize];
                         // if the received buffer contains FILE_AVAILABLE_REQUEST value then try to send data or 
                         // inform back that file is not available
-
-                        LogHandler.GetLogHandler.Log("");
-                        client.Client.Receive(requestBuffer, SocketFlags.Partial);
-                        LogHandler.GetLogHandler.Log("");
+                        m_serverClient.Client.Receive(requestBuffer, SocketFlags.Partial);
                         int receivedValue = Utils.GetIntFromBytes(requestBuffer);
                         LogHandler.GetLogHandler.Log("received message from server: " + receivedValue);
 
                         requestBuffer = new byte[m_BufferSize];
                         Array.Copy(BitConverter.GetBytes(m_queue.Count), requestBuffer, BitConverter.GetBytes(m_queue.Count).Length);
 
-                        if (stop)
-                        {
-                            LogHandler.GetLogHandler.Log("");
-                            client.Client.Send(requestBuffer);
-                        }
+                        m_serverClient.Client.Send(requestBuffer);
+
                         if (receivedValue == 0x01)
                         {
-                            int fileCount = m_queue.Count;
-                            int counter = 0;
-                            for (int i = 0; i < fileCount; i++)
+                            if (m_queue.Count != 0)
                             {
-                                Thread thread = new Thread(() => {
-                                    // ok send file or inform that queue is empty
-                                    if (fileCount > 0)
-                                    {
-                                        Data data = null;
-                                        bool result = m_queue.TryDequeue(out data);
-                                        if (result == true)
-                                        {
-                                            byte[] array = Utils.ObjectToByteArray(data);
-                                            byte[] message = new byte[m_BufferSize];
-                                            Array.Copy(array, requestBuffer, array.Length);
-                                            threadClient.Client.Send(requestBuffer, requestBuffer.Length, SocketFlags.Partial);
-
-                                            lock (locker)
-                                            {
-                                                LogHandler.GetLogHandler.Log("Message from Thread: " + Thread.CurrentThread.ManagedThreadId + " " + data.Header);
-                                            }
-                                        }
-                                        else
-                                        {
-                                            LogHandler.GetLogHandler.Log("Message from Thread: " + Thread.CurrentThread.ManagedThreadId + " - Queue is empty");
-                                        }
-                                        counter++;
-                                        if (counter == fileCount)
-                                        {
-                                            stop = true;
-                                            counter = 0;
-                                        }
-
-                                    }
-                                });
-                                thread.Start();
+                                for (int i = 0; i < m_threadCount; i++)
+                                {
+                                    ThreadPool.QueueUserWorkItem(new WaitCallback(SendDataCallback));
+                                }
                             }
                         }
                         else if (receivedValue == -1)
                         {
-                            // invalid data
                             LogHandler.GetLogHandler.Log("invalid data");
                             Thread.Sleep(m_Timeout);
                         }
                         else
                         {
-                            // there were no request sent
                             LogHandler.GetLogHandler.Log("there were no request sent");
                             Thread.Sleep(m_Timeout);
                         }
@@ -199,6 +165,36 @@ namespace test_queue
                     LogHandler.GetLogHandler.Log(p_exc.Message);
                 }
             }
+        }
+
+        private static void SendDataCallback(object state)
+        {
+            LogHandler.GetLogHandler.Log("Thread " + Thread.CurrentThread.ManagedThreadId + " started work");
+            while (m_queue.Count > 0)
+            {
+                // ok send file or inform that queue is empty
+                Data data = null;
+                bool result = false;
+                lock (m_threadLock)
+                {
+                    result = m_queue.TryDequeue(out data);
+                }
+                if (result == true)
+                {
+                    byte[] array = Utils.ObjectToByteArray(data);
+                    byte[] message = new byte[m_BufferSize];
+                    Array.Copy(array, message, array.Length);
+                    m_threadClient.Client.Send(message, message.Length, SocketFlags.Partial);
+
+                    LogHandler.GetLogHandler.Log("Message from Thread: " + Thread.CurrentThread.ManagedThreadId + " " + data.Header);
+                }
+                else
+                {
+                    LogHandler.GetLogHandler.Log("Message from Thread: " + Thread.CurrentThread.ManagedThreadId + " - Queue is empty");
+                }
+                Thread.Sleep(1000);
+            }
+            LogHandler.GetLogHandler.Log("Message from Thread: " + Thread.CurrentThread.ManagedThreadId + " finished work");
         }
     }
 }
